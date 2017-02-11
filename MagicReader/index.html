@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html ng-app="app">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,minimal-ui">
@@ -335,9 +335,9 @@
 </script>
 <script src="js/jquery.base64.js"></script>
 <script src="js/jquery.jsonp.js"></script>
-
 <script>
     (function () {
+        'use strict';
         var Util = (function () {
             var prefix = 'magic_reader_';
             var StorageGetter = function (key) {
@@ -352,7 +352,6 @@
                     cache: true,
                     callback: 'duokan_fiction_chapter',
                     success: function (result) {
-//                      debugger;
                         var data = $.base64.decode(result);
                         var json = decodeURIComponent(escape(data));
                         callback(json);
@@ -399,21 +398,43 @@
             var Chapter_id;
             var ChapterTotal;
             var init = function (UIcallback) {
-                getFictionInfo(function () {
-                    getCurChapterContent(Chapter_id, function (data) {
-                        UIcallback && UIcallback(data);
-                    });
-                })
+                getFictionInfoPromise().then(function (d) {
+                    return getCurChapterContentPromise();
+                }).then(function (data) {
+                    UIcallback && UIcallback(data);
+                });
             };
-            var getFictionInfo = function (callback) {
-                $.get('data/chapter.json', function (data) {
-                    Chapter_id = Util.StorageGetter('last_chapter_id');
-                    if (Chapter_id == null) {
-                        Chapter_id = data.chapters[1].chapter_id;
-                    }
-                    ChapterTotal = data.chapters.length;
-                    callback && callback();
-                }, 'json');
+
+            var getFictionInfoPromise = function () {
+                return new Promise(function (resolve, reject) {
+                    $.get('data/chapter.json', function (data) {
+                        if (data.result == 0) {
+                            Chapter_id = Util.StorageGetter('last_chapter_id');
+                            if (Chapter_id == null) {
+                                Chapter_id = data.chapters[1].chapter_id;
+                            }
+                            ChapterTotal = data.chapters.length;
+                            resolve();
+                        } else {
+                            reject();
+                        }
+                    }, 'json');
+                });
+            };
+
+            var getCurChapterContentPromise = function () {
+                return new Promise(function (resolve, reject) {
+                    $.get('data/data' + Chapter_id + '.json', function (data) {
+                        if (data.result == 0) {
+                            var url = data.jsonp;
+                            Util.getBSONP(url, function (data) {
+                                resolve(data);
+                            });
+                        } else {
+                            reject({msg: 'fail'});
+                        }
+                    }, 'json');
+                });
             };
 
             var getCurChapterContent = function (chapter_id, callback) {
@@ -421,7 +442,6 @@
                     if (data.result == 0) {
                         var url = data.jsonp;
                         Util.getBSONP(url, function (data) {
-//                            debugger;
                             callback && callback(data);
                         });
                     }
@@ -434,12 +454,14 @@
                     return;
                 }
                 Chapter_id -= 1;
+
+                //TODO : need to be modified for simplification
                 getCurChapterContent(Chapter_id, UIcallback);
                 Util.StorageSetter('last_chapter_id', Chapter_id);
             };
-
             var nextChapter = function (UIcallback) {
                 Chapter_id = parseInt(Chapter_id, 10);
+                //TODO : need to be modified with server side code
                 if (Chapter_id == ChapterTotal) {
                     return;
                 }
@@ -491,20 +513,6 @@
                 } else {
                     Dom.font_container.hide();
                     Dom.font_button.removeClass('current');
-                }
-            });
-
-            $('#night-button').click(function () {
-                if (NightMode) {
-                    $('#day_icon').hide();
-                    $('#night_icon').show();
-                    $('#font_normal').trigger('click');
-                    NightMode = false;
-                } else {
-                    $('#day_icon').show();
-                    $('#night_icon').hide();
-                    $('#font_night').trigger('click');
-                    NightMode = true;
                 }
             });
 
